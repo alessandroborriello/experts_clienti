@@ -135,6 +135,8 @@ class StrategyRunner:
             return
 
         self._last_bar_time = last_bar_time
+        log.info("Nuova barra M5 su %s (chiusa alle %s UTC), valuto il segnale",
+                  symbol, epoch_to_utc(last_bar_time).strftime("%H:%M:%S"))
         self._evaluate_new_bar(symbol, bars, positions, market, italian_moment)
 
     # ------------------------------------------------------------------
@@ -173,14 +175,18 @@ class StrategyRunner:
         features = self.strategy.compute_features(bars)
         payload = self.strategy.build_ml_payload(features, account, symbol)
 
+        url = self.strategy.ml_endpoint_url()
+        log.info("Invio richiesta al servizio ML per %s -> %s", symbol, url)
+        sent_at = time.monotonic()
         try:
-            resp = requests.post(self.strategy.ml_endpoint_url(), json=payload,
-                                  timeout=self.config.ml_timeout_seconds)
+            resp = requests.post(url, json=payload, timeout=self.config.ml_timeout_seconds)
             resp.raise_for_status()
             raw = resp.json()
         except Exception:
-            log.exception("Chiamata al servizio ML fallita, salto questa barra")
+            log.exception("Chiamata al servizio ML fallita dopo %.2fs, salto questa barra",
+                           time.monotonic() - sent_at)
             return
+        log.info("Risposta ML ricevuta per %s in %.2fs", symbol, time.monotonic() - sent_at)
 
         prediction = self.strategy.parse_ml_response(raw)
 
@@ -203,6 +209,10 @@ class StrategyRunner:
 
         signal = self.strategy.decide_signal(prediction, ctx)
         if signal is None:
+            log.info("Nessun segnale operativo per %s su questa barra "
+                      "(allowed_time=%s semaphore=%s daily_loss=%s has_open_position=%s)",
+                      symbol, ctx.allowed_time, ctx.semaphore_triggered,
+                      ctx.daily_loss_hit, ctx.has_open_position)
             return
 
         if signal.is_virtual:
