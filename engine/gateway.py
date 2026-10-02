@@ -94,6 +94,16 @@ class MT5Gateway:
         if not self.mt5.symbol_select(symbol, True):
             raise MT5ConnectionError(f"Impossibile selezionare il simbolo {symbol} in Market Watch")
 
+    def get_symbols(self, group: Optional[str] = None) -> list[str]:
+        """Elenco dei simboli noti al broker collegato (per popolare una
+        tendina invece di farli scrivere a mano). symbols_get() restituisce
+        TUTTI i simboli del broker, non solo quelli già nel Market Watch;
+        `group` filtra per pattern come fa MetaTrader stesso (es. "*USD*")."""
+        raw = self.mt5.symbols_get(group) if group else self.mt5.symbols_get()
+        if raw is None:
+            return []
+        return sorted(s.name for s in raw)
+
     def server_time_epoch(self, symbol: str) -> float:
         """Ora del server/broker (epoch), letta dall'ultimo tick - stessa
         base temporale di OpenPosition.open_time_epoch."""
