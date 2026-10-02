@@ -45,6 +45,38 @@ def fixed_lot(lot_size: float) -> float:
     return lot_size
 
 
+def martingale_lot(candidates: list[tuple[float, float]], initial_lots: float,
+                    multiply_on_loss: float) -> float:
+    """Porting semplificato di BetMartingale()/GetBetTradesInfo() di
+    "ATS Spread.mq5" (blocchi MDL_SellNow/MDL_BuyNow, VolumeMode="martingale"),
+    per i default REALI con cui gira quell'EA: mmMgResetOnLoss=0 (mai usato,
+    una perdita moltiplica SEMPRE), mmMgResetOnProfit=1 (un solo profitto
+    azzera SEMPRE), mmMgMultiplyOnProfit=1.0, addOnLoss=addOnProfit=0. Con
+    questi default il conteggio di "operazioni consecutive" che l'originale
+    traccia non cambia mai l'esito, quindi non serve riscrivere lo scanner
+    storico completo (GetBetTradesInfo esplora prima le posizioni aperte poi
+    lo storico, ricorsivamente): basta l'ULTIMA operazione pertinente.
+
+    `candidates`: coppie (pnl, lottaggio) delle operazioni pertinenti
+    (stesso simbolo+magic - la direzione non serve: in pratica su un
+    simbolo è aperta una sola direzione alla volta, vedi i gate d'ingresso),
+    ordinate dalla più recente alla più vecchia (prima le posizioni ancora
+    aperte, poi i deal storici). Il pnl deve essere il movimento di prezzo
+    puro (senza swap/commissione), come calcola l'originale
+    (OrderClosePrice()-OrderOpenPrice(), capovolto per le vendite) - per le
+    posizioni aperte va bene il profitto fluttuante del broker (stesso
+    segno). Una entry con pnl esattamente 0.0 è ignorata (come
+    nell'originale, che la considera "inesistente").
+    """
+    for pnl, lots in candidates:
+        if pnl == 0.0:
+            continue
+        if pnl < 0.0:
+            return lots * multiply_on_loss
+        return initial_lots
+    return initial_lots
+
+
 def dynamic_risk_lot(open_price: float, sl_price: float, inputs: DynamicRiskInputs,
                       fallback_lot: float) -> float:
     """Porting esatto di CalcDynamicLots() in MetodoATS_AIEvol_27.mq5."""

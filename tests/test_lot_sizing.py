@@ -6,6 +6,7 @@ from common.lot_sizing import (
     LotSizeServiceError,
     dynamic_risk_lot,
     fixed_lot,
+    martingale_lot,
     profile_table_lot,
 )
 
@@ -62,6 +63,29 @@ class TestDynamicRiskLot(unittest.TestCase):
         inputs = self._inputs(tick_size=0.0)
         lots = dynamic_risk_lot(1.1050, 1.1000, inputs, fallback_lot=0.1)
         self.assertEqual(lots, 0.1)
+
+
+class TestMartingaleLot(unittest.TestCase):
+    def test_no_candidates_returns_initial(self):
+        self.assertEqual(martingale_lot([], initial_lots=0.01, multiply_on_loss=1.05), 0.01)
+
+    def test_most_recent_loss_multiplies_its_own_lots(self):
+        # l'ultima operazione pertinente (0.03 lotti) era in perdita -> 0.03*1.05
+        lots = martingale_lot([(-5.0, 0.03), (-2.0, 0.01)], initial_lots=0.01, multiply_on_loss=1.05)
+        self.assertAlmostEqual(lots, 0.0315, places=6)
+
+    def test_most_recent_profit_resets_to_initial(self):
+        lots = martingale_lot([(12.0, 0.0315), (-5.0, 0.03)], initial_lots=0.01, multiply_on_loss=1.05)
+        self.assertEqual(lots, 0.01)
+
+    def test_exact_zero_pnl_is_skipped_like_nonexistent(self):
+        # la più recente ha pnl 0.0 (ignorata, come GetBetTradesInfo): si guarda la precedente
+        lots = martingale_lot([(0.0, 0.05), (-5.0, 0.03)], initial_lots=0.01, multiply_on_loss=1.05)
+        self.assertAlmostEqual(lots, 0.0315, places=6)
+
+    def test_all_zero_pnl_falls_back_to_initial(self):
+        lots = martingale_lot([(0.0, 0.05), (0.0, 0.03)], initial_lots=0.01, multiply_on_loss=1.05)
+        self.assertEqual(lots, 0.01)
 
 
 class TestProfileTableLot(unittest.TestCase):

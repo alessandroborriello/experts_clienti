@@ -185,3 +185,59 @@ class Strategy(ABC):
 
         `now_epoch` deve essere nella stessa base temporale di
         OpenPosition.open_time_epoch (quella del server/broker)."""
+
+
+@dataclass
+class MultiSymbolOpenOrder:
+    """Decisione di apertura per una strategia multi-simbolo: più semplice
+    di Signal (niente ML/confidence/virtual) perché queste strategie
+    decidono con regole tecniche dirette, non un servizio esterno."""
+    symbol: str
+    direction: str              # "BUY" oppure "SELL"
+    volume: float
+    comment: str = ""
+
+
+@dataclass
+class MultiSymbolMarketData:
+    """Tutto quello che MultiSymbolStrategy.evaluate() riceve ad ogni poll.
+    `bars`/`market` sono dict per simbolo (le chiavi sono quelle dichiarate
+    da required_bars()); `positions` contiene TUTTE le posizioni aperte con
+    il magic number di questa strategia, su QUALSIASI simbolo (una strategia
+    multi-simbolo gestisce un paniere unico, non un simbolo alla volta)."""
+    now_epoch: float
+    bars: dict[str, pd.DataFrame]
+    market: dict[str, MarketSnapshot]
+    positions: list[OpenPosition]
+
+
+class MultiSymbolStrategy(ABC):
+    """Interfaccia per strategie che lavorano su più simboli insieme (es.
+    spread trading/arbitraggio tra 2+ simboli, con un paniere di posizioni
+    condiviso) - a differenza di Strategy, pensata per UN simbolo alla volta
+    guidato da un servizio ML esterno. Il motore dedicato
+    (engine/multi_symbol_runner.py) fa girare queste strategie con un ciclo
+    diverso da StrategyRunner: niente ml_endpoint_url/decide_signal, un solo
+    evaluate() che riceve già tutti i dati di mercato richiesti.
+
+    name/magic_number: come Strategy."""
+
+    name: str
+    magic_number: int
+
+    @abstractmethod
+    def required_bars(self) -> dict[str, tuple[str, int]]:
+        """simbolo -> (timeframe MT5 come stringa es. "H1"/"H4", numero di
+        barre chiuse richieste). Il motore legge esattamente queste barre,
+        per questi simboli, ad ogni poll, e le passa in
+        MultiSymbolMarketData.bars."""
+
+    @abstractmethod
+    def evaluate(self, data: MultiSymbolMarketData) -> list["MultiSymbolOpenOrder | Action"]:
+        """Decide le azioni da eseguire - aperture (MultiSymbolOpenOrder) e/o
+        chiusure di posizioni esistenti (Action con kind="close") - SENZA
+        eseguire nulla, come Strategy.decide_signal/manage_open_positions.
+        Può mantenere stato interno tra una chiamata e l'altra (es. l'ultima
+        barra vista per simbolo, per rilevare un nuovo incrocio una sola
+        volta): l'istanza della strategia vive per tutta la durata
+        dell'istanza della console, non viene ricreata ad ogni poll."""

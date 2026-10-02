@@ -88,3 +88,21 @@ def should_close_thursday(moment: ItalianMoment, close_hour: int, close_minute: 
     if moment.day_of_week != 4:
         return False
     return moment.minutes_of_day >= close_hour * 60 + close_minute
+
+
+def is_within_server_window(now_epoch: float, start: str, end: str) -> bool:
+    """Porting di MDL_TimeFilter con ServerOrLocalTime="server" (usato da
+    "ATS Spread.mq5"): confronta l'ORA DEL SERVER/BROKER direttamente, senza
+    nessuna conversione di fuso - a differenza di ItalianMoment, che è
+    pensato per le regole (di un'altra strategia) che ragionano esplicitamente
+    in ora italiana. now_epoch è lo stesso valore "epoch" del broker usato
+    altrove nel motore (es. MT5Gateway.server_time_epoch); qui si legge solo
+    ora:minuto trattandolo come già l'orologio del server, senza passare da
+    UTC->Europe/Rome. start/end sono stringhe "HH:MM"."""
+    moment = datetime.fromtimestamp(now_epoch, tz=timezone.utc).time()
+    start_h, start_m = (int(x) for x in start.split(":"))
+    end_h, end_m = (int(x) for x in end.split(":"))
+    start_minutes = start_h * 60 + start_m
+    end_minutes = end_h * 60 + end_m
+    now_minutes = moment.hour * 60 + moment.minute
+    return start_minutes <= now_minutes <= end_minutes

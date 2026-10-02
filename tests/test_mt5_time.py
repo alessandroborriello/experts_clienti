@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from common.mt5_time import (
     ItalianMoment,
+    is_within_server_window,
     mql5_day_of_week,
     should_close_friday,
     should_close_thursday,
@@ -94,6 +95,26 @@ class TestCloseThursday(unittest.TestCase):
     def test_enabled_works_like_friday_logic(self):
         self.assertTrue(should_close_thursday(self._moment(4, 21, 50), 21, 50, enabled=True))
         self.assertFalse(should_close_thursday(self._moment(4, 21, 49), 21, 50, enabled=True))
+
+
+class TestServerWindow(unittest.TestCase):
+    def _epoch(self, hour, minute):
+        # tratta l'epoch COME l'ora del server, senza conversioni di fuso
+        # (vedi docstring di is_within_server_window)
+        return datetime(2026, 10, 2, hour, minute, tzinfo=timezone.utc).timestamp()
+
+    def test_inside_window(self):
+        self.assertTrue(is_within_server_window(self._epoch(15, 0), "10:00", "21:00"))
+
+    def test_before_window(self):
+        self.assertFalse(is_within_server_window(self._epoch(9, 59), "10:00", "21:00"))
+
+    def test_after_window(self):
+        self.assertFalse(is_within_server_window(self._epoch(21, 1), "10:00", "21:00"))
+
+    def test_inclusive_bounds(self):
+        self.assertTrue(is_within_server_window(self._epoch(10, 0), "10:00", "21:00"))
+        self.assertTrue(is_within_server_window(self._epoch(21, 0), "10:00", "21:00"))
 
 
 if __name__ == "__main__":

@@ -112,12 +112,26 @@ class MT5Gateway:
             raise MT5ConnectionError(f"symbol_info_tick({symbol}) ha restituito None")
         return float(tick.time)
 
-    def get_closed_bars(self, symbol: str, count: int) -> pd.DataFrame:
-        """Barre M5 CHIUSE (esclude quella in formazione): start_pos=1 in
-        copy_rates_from_pos salta la barra corrente (posizione 0)."""
-        rates = self.mt5.copy_rates_from_pos(symbol, self.mt5.TIMEFRAME_M5, 1, count)
+    _TIMEFRAMES = {
+        "M1": "TIMEFRAME_M1", "M5": "TIMEFRAME_M5", "M15": "TIMEFRAME_M15",
+        "M30": "TIMEFRAME_M30", "H1": "TIMEFRAME_H1", "H4": "TIMEFRAME_H4",
+        "D1": "TIMEFRAME_D1", "W1": "TIMEFRAME_W1", "MN1": "TIMEFRAME_MN1",
+    }
+
+    def get_closed_bars(self, symbol: str, count: int, timeframe: str = "M5") -> pd.DataFrame:
+        """Barre CHIUSE (esclude quella in formazione): start_pos=1 in
+        copy_rates_from_pos salta la barra corrente (posizione 0).
+
+        `timeframe` di default "M5" per compatibilita' con MetodoATS_AIEvol_27
+        (che lavora solo su M5); ATS Spread usa invece H4/H1 a seconda del
+        simbolo - vedi strategies/ats_spread.py."""
+        try:
+            tf_const = getattr(self.mt5, self._TIMEFRAMES[timeframe])
+        except KeyError:
+            raise ValueError(f"Timeframe non supportato: {timeframe!r}")
+        rates = self.mt5.copy_rates_from_pos(symbol, tf_const, 1, count)
         if rates is None or len(rates) == 0:
-            raise MT5ConnectionError(f"copy_rates_from_pos({symbol}) ha restituito nessun dato")
+            raise MT5ConnectionError(f"copy_rates_from_pos({symbol}, {timeframe}) ha restituito nessun dato")
         df = pd.DataFrame(rates)
         return df.sort_values("time").reset_index(drop=True)
 
@@ -171,7 +185,7 @@ class MT5Gateway:
                 magic=d.magic, symbol=d.symbol,
                 is_exit=(d.entry == self.mt5.DEAL_ENTRY_OUT),
                 profit=d.profit, swap=d.swap, commission=d.commission,
-                time_epoch=float(d.time),
+                time_epoch=float(d.time), volume=float(d.volume),
             ))
         return out
 

@@ -23,6 +23,7 @@ class Deal:
     swap: float
     commission: float
     time_epoch: float
+    volume: float = 0.0    # lottaggio del deal - usato dal martingala di ATS Spread
 
 
 def is_daily_loss_hit(deals: list[Deal], balance: float, daily_loss_limit_pct: float,
