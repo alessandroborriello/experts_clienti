@@ -34,6 +34,7 @@ from typing import Any, Optional
 import pandas as pd
 
 from common.mt5_time import ItalianMoment
+from common.risk_rules import Deal
 
 
 @dataclass
@@ -146,6 +147,18 @@ class Strategy(ABC):
         0=SELL, -1=nessuno) e la confidence. Equivalente della ricerca di
         sottostringhe `"prediction":2` / `"confidence":` nell'EA, ma fatto
         con un vero parser JSON invece di scansionare il testo a mano."""
+
+    @abstractmethod
+    def evaluate_risk_gates(self, account: AccountSnapshot, symbol: str, deals: list[Deal],
+                             deals_desc: list[Deal], day_start_epoch: float) -> tuple[bool, bool]:
+        """Ritorna (daily_loss_hit, semaphore_triggered) per questo simbolo,
+        equivalente di IsDailyLossHit()/IsSemaphoreTriggered(). Tenuto come
+        metodo della strategia (non del motore) perché le soglie (%
+        giornaliera, N perdite consecutive) sono parametri specifici della
+        strategia, non del motore che la fa girare.
+
+        `deals` e `deals_desc` sono lo stesso storico, il secondo ordinato
+        dal più recente al più vecchio (serve a IsSemaphoreTriggered)."""
 
     @abstractmethod
     def decide_signal(self, prediction: dict[str, Any], ctx: DecisionContext) -> Optional[Signal]:

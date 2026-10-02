@@ -28,17 +28,26 @@ si era parlato, non come il repo di sviluppo completo.
   **MetodoATS_AIEvol_27.mq5**: stesse feature ML (87 campi + account),
   stesso endpoint, stessa matematica di TP/SL/breakeven/semaforo/limite
   giornaliero/chiusure.
-- `tests/` — 60+ test (unittest) che verificano tutto quanto sopra.
+- `engine/gateway.py` — **il motore, parte 1**: l'UNICO modulo che importa
+  davvero il package `MetaTrader5` ed esegue operazioni reali (letture di
+  mercato, invio ordini, chiusure, modifiche SL/TP).
+- `engine/runner.py` — **il motore, parte 2**: il ciclo che collega una
+  strategia a un simbolo tramite il gateway. Gestisce le posizioni aperte
+  (breakeven/SL monetario/chiusure) ad ogni poll, valuta un nuovo segnale
+  ML solo a cambio barra M5, con un `dry_run=True` di default che logga le
+  decisioni senza eseguire nulla.
+- `run_engine.py` — esempio di avvio con un vero terminale (da adattare
+  per cliente).
+- `tests/` — 96 test (unittest) che verificano tutto quanto sopra,
+  **incluso il motore** (con un gateway finto — vedi sotto, nessun test
+  qui parla con un vero terminale MT5).
 
-**NON fatto** (è il prossimo pezzo, "il motore"):
-- Nessun codice qui si collega davvero a MetaTrader5. Le strategie
-  ricevono dati già pronti e restituiscono *decisioni* (vedi
-  `strategies/base.py`): un ciclo esterno (il motore) dovrà leggere i dati
-  reali da `MetaTrader5`, chiamarle, ed eseguire quello che decidono con
-  `mt5.order_send()`/`mt5.positions_get()` ecc. Quel ciclo non esiste
-  ancora in questo progetto.
+**NON fatto:**
 - Nessuna console/GUI. Nessun collegamento al catalogo Git dei
   clienti/aggiornamenti.
+- `engine/gateway.py` non è mai stato eseguito contro un terminale MT5
+  reale (l'ambiente di sviluppo non ne ha uno): vedi l'avviso in testa al
+  file prima di usarlo con denaro reale.
 
 ## Come far girare i test
 
@@ -106,4 +115,24 @@ MetaTrader live:
 motore in parallelo (stesso simbolo, stesso istante) per un po' di barre,
 loggando le feature calcolate da entrambi, e confronta. Se vedi
 differenze sistematiche oltre quelle elencate sopra, è lì che vanno
-cercate.
+cercate. Per il motore stesso (`engine/gateway.py`), aggiungi: la prima
+esecuzione reale va fatta con `RunnerConfig(dry_run=True)` (il default),
+guardando nei log cosa farebbe senza eseguire nulla, e idealmente su un
+conto demo prima di passare a `dry_run=False`.
+
+## Avviare il motore (quando pronto per un conto reale/demo)
+
+```python
+from engine.gateway import MT5Gateway
+from engine.runner import RunnerConfig, StrategyRunner
+from strategies.metodo_ats_aievol_27 import MetodoATSAIEvol27, MetodoATSConfig
+
+gateway = MT5Gateway()
+gateway.connect()   # richiede un terminale MT5 già installato e loggato
+
+strategy = MetodoATSAIEvol27(MetodoATSConfig(magic_number=1, lot_size=0.1))
+runner = StrategyRunner(strategy, gateway, RunnerConfig(symbol="EURUSD", dry_run=True))
+runner.run_forever()
+```
+
+Vedi `run_engine.py` per un esempio completo e commentato.

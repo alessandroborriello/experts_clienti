@@ -52,6 +52,7 @@ from common.lot_sizing import (
     profile_table_lot,
 )
 from common.mt5_time import ItalianMoment, mql5_day_of_week, should_close_friday, should_close_thursday
+from common.risk_rules import Deal, is_daily_loss_hit, is_semaphore_triggered
 from strategies.base import (
     Action,
     AccountSnapshot,
@@ -381,6 +382,18 @@ class MetodoATSAIEvol27(Strategy):
             "confidence": raw_response.get("confidence"),
             "raw": raw_response,
         }
+
+    # ------------------------------------------------------------------
+    def evaluate_risk_gates(self, account: AccountSnapshot, symbol: str, deals: list[Deal],
+                             deals_desc: list[Deal], day_start_epoch: float) -> tuple[bool, bool]:
+        daily_loss_hit = is_daily_loss_hit(
+            deals, account.balance, self.config.daily_loss_limit_pct,
+            self.magic_number, symbol, day_start_epoch,
+        )
+        semaphore_triggered = is_semaphore_triggered(
+            deals_desc, self.config.semaphore_losses, self.magic_number, symbol,
+        )
+        return daily_loss_hit, semaphore_triggered
 
     # ------------------------------------------------------------------
     def decide_signal(self, prediction: dict[str, Any], ctx: DecisionContext) -> Optional[Signal]:
